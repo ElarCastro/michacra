@@ -15,12 +15,13 @@
 <body>
 <main>
 <h1>Política de privacidad de MI-CHACRA</h1>
-<p class="sub">Vigente desde el 26 de noviembre de 2026 · Responsable: <b>Elar Castro Tello</b> (RUC 10466348312), titular de la tienda CHINCARMAS, Villa Rica, Oxapampa, Pasco, Perú · Contacto: <b>elarcastrotello@gmail.com</b></p>
+<p class="sub">Vigente desde el 27 de noviembre de 2026 · Responsable: <b>Elar Castro Tello</b> (RUC 10466348312), titular de la tienda CHINCARMAS, Villa Rica, Oxapampa, Pasco, Perú · Contacto: <b>elarcastrotello@gmail.com</b></p>
 
-<div class="caja"><b>En pocas palabras:</b> lo que anotas en MI-CHACRA se guarda en tu celular. Si activas la nube, tus datos viajan <b>cifrados</b> y nadie más puede leerlos, ni siquiera CHINCARMAS. No vendemos tus datos ni usamos publicidad de terceros. Puedes borrar tu cuenta y tus datos cuando quieras.</div>
+<div class="caja"><b>En pocas palabras:</b> lo que anotas en MI-CHACRA se guarda en tu celular. Si entras con tu cuenta, tus datos también se guardan en la nube para que no se pierdan y puedas usar la app en varios celulares; <b>solo tú</b> (y las personas que tú invites) pueden verlos. No vendemos tus datos ni usamos publicidad de terceros. Puedes borrar tu cuenta y tus datos cuando quieras.</div>
 
 <h2>1. Qué datos maneja la app</h2>
 <ul>
+  <li><b>Tu cuenta</b> (si la creas): tu correo electrónico, o tu nombre y correo de Google si entras con Google.</li>
   <li><b>Datos de tu chacra</b> que tú registras: usuarios de la app (nombre y PIN; el PIN se guarda solo como huella cifrada), chacras, parcelas, cultivos, campañas, trabajadores (nombre, DNI, celular, código), asistencia, cosecha, pagos y adelantos, contratas, abonos y químicos, almacén, gastos, inversiones, ventas y clientes.</li>
   <li><b>Pedidos a la tienda CHINCARMAS</b> (solo si haces un pedido): tu nombre, celular, dirección o referencia de entrega, los productos, la forma de pago y tu nota.</li>
   <li><b>Fotos y archivos</b> que tú eliges (fotos de productos de la tienda, copias de seguridad, informes en Excel o PDF).</li>
@@ -30,7 +31,7 @@
 <h2>2. Dónde se guardan</h2>
 <ul>
   <li><b>En tu celular</b>, siempre. La app funciona sin internet.</li>
-  <li><b>En la nube, solo si la activas</b> (Más → Nube y copias), para usar la app en varios celulares y tener copia de seguridad. Usamos el servicio Supabase, con servidores en Estados Unidos. Antes de salir de tu celular, cada dato se <b>cifra con AES-256</b> usando una llave que se obtiene de la clave de tu cuenta, que solo está en tus celulares. Por eso <b>ni CHINCARMAS ni Supabase pueden leer tu información</b>.</li>
+  <li><b>En la nube, solo si entras con tu cuenta</b> (con tu correo o con Google), para usar la app en varios celulares y tener copia de seguridad. Usamos el servicio Supabase, con servidores en Estados Unidos. Cada cuenta solo puede leer y modificar sus propios espacios: el servidor revisa quién eres en cada conexión y bloquea a cualquier otra persona. Los datos viajan cifrados (HTTPS) y se guardan cifrados en los discos del proveedor. Si usas la nube antigua con código de conexión, tus datos siguen cifrados de extremo a extremo hasta que pases a tu cuenta.</li>
   <li><b>Pedidos</b>: los datos del pedido (punto 1) se envían a CHINCARMAS para atenderlo, coordinar el pago y la entrega. La tienda conserva el registro de la venta.</li>
 </ul>
 
@@ -42,7 +43,7 @@
 </ul>
 
 <h2>4. Con quién se comparten</h2>
-<p>No vendemos ni alquilamos tus datos. Solo intervienen: Supabase (almacena la información cifrada y los pedidos) y, cuando tú lo decides, las apps que eliges para compartir (por ejemplo WhatsApp, al enviar una boleta o un pedido).</p>
+<p>No vendemos ni alquilamos tus datos. Solo intervienen: Supabase (almacena tu cuenta, los datos de tu chacra y los pedidos), Brevo (envía el correo con tu código para entrar; solo recibe tu correo electrónico), Google (solo si eliges entrar con Google) y, cuando tú lo decides, las apps que eliges para compartir (por ejemplo WhatsApp, al enviar una boleta o un pedido).</p>
 
 <h2>5. Permisos del celular</h2>
 <ul>
@@ -55,7 +56,7 @@
 <ul>
   <li>En tu celular, hasta que los borres. Lo que eliminas pasa a una papelera por 30 días.</li>
   <li><b>Borrar los datos del celular</b>: Más → Ajustes → Privacidad y datos → <i>Borrar todos los datos de este celular</i>.</li>
-  <li><b>Eliminar tu cuenta y tus datos de la nube</b>: Más → Nube y copias → <i>Eliminar mi cuenta y mis datos de la nube</i>. Se borran de inmediato. Tus pedidos a la tienda quedan sin tu nombre, celular ni dirección.</li>
+  <li><b>Eliminar tu cuenta y tus datos de la nube</b>: Más → Mi cuenta y nube → <i>Eliminar mi cuenta y mis datos de la nube</i>. Se borran de inmediato tu cuenta y todos tus espacios. Tus pedidos a la tienda quedan sin tu nombre, celular ni dirección.</li>
   <li>También puedes pedir el borrado sin la app: ver <a href="eliminar-cuenta.html">cómo eliminar tu cuenta</a> o escribir a elarcastrotello@gmail.com. Respondemos en un plazo máximo de 30 días.</li>
 </ul>
 
@@ -69,7 +70,7 @@
 <p>MI-CHACRA está dirigida a personas mayores de 18 años que administran una chacra o trabajan en ella.</p>
 
 <h2>10. Seguridad</h2>
-<p>Usamos cifrado en tránsito (HTTPS) y cifrado de extremo a extremo en la nube. El acceso a la app se protege con PIN. Si pierdes el celular, puedes eliminar tu cuenta de la nube desde otro celular conectado o escribiéndonos.</p>
+<p>Usamos cifrado en tránsito (HTTPS) y cifrado en reposo en la nube, y reglas en el servidor para que cada cuenta vea solo sus datos. El ingreso a tu cuenta es con un código enviado a tu correo o con Google (sin contraseñas), y el uso diario de la app se protege con PIN. Si pierdes el celular, entra con tu cuenta desde otro y cierra la sesión o elimina tu cuenta, o escríbenos.</p>
 
 <h2>11. Cambios</h2>
 <p>Si cambiamos esta política, publicaremos la nueva versión en esta página y en la app, con su fecha de vigencia.</p>
