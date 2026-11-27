@@ -1,0 +1,37 @@
+# Mantiene activa la nube gratuita de MI-CHACRA (Supabase pausa el plan gratis tras 7 días sin uso).
+# Solo llama a la función pública mc2_ping con la llave pública de la app: no usa secretos.
+name: Mantener la nube activa
+
+on:
+  schedule:
+    - cron: "17 11 * * *"   # todos los días, 6:17 a. m. hora de Perú
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tocar la nube
+        run: |
+          curl -fsS -X POST "https://tucjyenxczngmrtorzkp.supabase.co/rest/v1/rpc/mc2_ping" \
+            -H "apikey: sb_publishable_XVmiFHu_Zqa9CMShsP2NhQ_fgJEBhD1" \
+            -H "Content-Type: application/json" -d "{}"
+          echo
+      # GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin cambios.
+      # Una vez por semana (lunes) se guarda la fecha del último ping para que siga activo.
+      - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_dispatch' || (github.event.schedule && startsWith(github.event.schedule, '17 11'))
+      - name: Registrar el ping semanal
+        if: github.event_name == 'workflow_dispatch' || (github.event.schedule && startsWith(github.event.schedule, '17 11'))
+        run: |
+          if [ "$(date -u +%u)" = "1" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            date -u +"%Y-%m-%d %H:%M UTC" > ultimo-ping.txt
+            git config user.name "mi-chacra-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ultimo-ping.txt
+            git commit -m "Ping semanal de la nube" || true
+            git push
+          fi
