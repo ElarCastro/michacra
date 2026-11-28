@@ -259,6 +259,7 @@ VISTAS.trabajador = id => {
     '<tr><td class="muted">Chacras</td><td class="m">' + esc((t.chacras || []).map(c => (DB.get('chacras', c) || {}).nombre).filter(Boolean).join(', ')) + '</td></tr>' +
     '<tr><td class="muted">Acceso a la app</td><td class="m">' + (t.acceso ? 'Sí · entra con DNI y PIN' : 'No') + '</td></tr>' +
     (t.nota ? '<tr><td class="muted">Notas</td><td class="m" style="white-space:normal">' + esc(t.nota) + '</td></tr>' : '') + '</table></div>';
+  h += tarjetaCelularTrabajador(t);
   // Últimos registros
   const regs = [...DB.deChacra('cosechas').filter(r => r.trabajadorId === t.id).map(r => ({ r, col: 'cosechas' })),
     ...DB.deChacra('trabajos').filter(r => r.trabajadorId === t.id).map(r => ({ r, col: 'trabajos' })),

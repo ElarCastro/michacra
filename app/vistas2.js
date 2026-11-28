@@ -594,8 +594,54 @@ async function cargarEquipo(forzar) {
   EQUIPO.cargando = true;
   try { EQUIPO.datos = await CUENTA.rpc('mc2_equipo', { p_espacio: n.espacio }); EQUIPO.de = n.espacio; } catch (e) { EQUIPO.datos = null; }
   EQUIPO.cargando = false;
-  if (location.hash === '#/usuarios' && !PILA.length) render();
+  if ((location.hash === '#/usuarios' || location.hash.startsWith('#/trabajador/')) && !PILA.length) render();
 }
+
+/* ---------- Celular del trabajador (Fase 3) ---------- */
+function tarjetaCelularTrabajador(t) {
+  if (!NUBE.esV2() || !NUBE.activa() || !DB.puede('trabajadores') || t.activo === false) return '';
+  cargarEquipo();
+  const eq = EQUIPO.datos;
+  if (!eq) return '';
+  const m = (eq.trabajadores || []).find(x => x.trabajador === t.id && x.activo);
+  const inv = (eq.invitaciones || []).find(x => x.trabajador === t.id);
+  const est = m ? pill('Conectado', 'ok') + ' <span class="small muted">' + esc(m.email || '') + '</span>'
+    : inv ? pill('Invitación enviada', 'info') + ' <span class="small muted">vence ' + fecha(String(inv.vence).slice(0, 10)) + '</span>' : pill('Sin celular', 'warn');
+  const btn = m
+    ? '<button class="btn chico peligro" data-act="quitarAccesoTrab" data-id="' + t.id + '">' + ico('candado', 's') + 'Quitar acceso</button>'
+    : '<button class="btn chico" data-act="invitarTrab" data-id="' + t.id + '">' + ico('whatsapp', 's') + (inv ? 'Reenviar invitación' : 'Invitar a su celular') + '</button>';
+  return '<div class="card"><div style="font-weight:700;margin-bottom:4px">Su celular</div>' +
+    '<p class="small muted" style="margin:0 0 8px">Con su propia cuenta ve sus días, latas, pagos y boletas, y puede reportar un error. No ve nada de los demás.</p>' +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + est + btn + '</div></div>';
+}
+ACC.invitarTrab = async el => {
+  const t = DB.get('trabajadores', el.dataset.id);
+  if (!t) return;
+  toast('Preparando la invitación…');
+  await NUBE.sincronizar(true); // la ficha debe estar en la nube
+  if (NUBE.estado === 'sinred') return toast('Necesitas internet para invitar', 'error');
+  let r;
+  try { r = await CUENTA.rpc('mc2_invitar_trabajador', { p_espacio: NUBE.cfg().espacio, p_trabajador: t.id }); } catch (e) { return toast(e.message, 'error'); }
+  const ch = (DB.todos('chacras').find(c => (t.chacras || []).includes(c.id)) || {}).nombre || 'la chacra';
+  const txt = 'Hola ' + t.nombre.split(' ')[0] + ', desde ahora puedes ver en tu celular tus días, latas, pagos y boletas de ' + ch + ' con MI-CHACRA.\n\n' +
+    '1) Instala la app desde Play Store: https://play.google.com/apps/internaltest/4700642312873271512\n' +
+    '   o úsala en el navegador: https://elarcastro.github.io/michacra/app/\n' +
+    '2) Entra con tu correo o con Google.\n' +
+    '3) Toca "Tengo una invitación" y escribe este código: ' + r.codigo + '\n\n(El código sirve una sola vez y vence en 7 días.)';
+  const h = abrirHoja(cabHoja('Invitación para ' + t.nombre) +
+    '<p class="muted small" style="margin:0 0 6px">Código de un solo uso, vence el ' + fecha(String(r.vence).slice(0, 10)) + ':</p>' +
+    '<p style="font-size:30px;font-weight:700;letter-spacing:3px;text-align:center;margin:8px 0 14px">' + esc(r.codigo) + '</p>' +
+    '<button class="btn pri bloque" data-x="wa">' + ico('whatsapp') + 'Enviar por WhatsApp</button>' +
+    '<p class="small muted" style="margin-top:10px">Verá solo su propia información y podrá reportar errores. Puedes quitarle el acceso cuando quieras.</p>');
+  h.querySelector('[data-x=wa]').onclick = () => t.celular ? abrirExterno(enlaceWhatsApp(t.celular, txt)) : compartirTexto(txt);
+  cargarEquipo(true);
+};
+ACC.quitarAccesoTrab = async el => {
+  const t = DB.get('trabajadores', el.dataset.id);
+  if (!t || !(await confirmar('Quitar acceso a ' + t.nombre, 'Su celular dejará de recibir datos de inmediato y se borrará la copia que tiene. Puedes volver a invitarlo después.', { si: 'Quitar acceso', peligro: true }))) return;
+  try { await CUENTA.rpc('mc2_quitar_trabajador', { p_espacio: NUBE.cfg().espacio, p_trabajador: t.id }); } catch (e) { return toast(e.message, 'error'); }
+  toast('Acceso quitado'); cargarEquipo(true);
+};
 ACC.invitarUsuario = async el => {
   const u = DB.get('usuarios', el.dataset.id);
   if (!u) return;

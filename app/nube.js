@@ -113,7 +113,10 @@ const NUBE = {
       // v2: revisar mis permisos. Si el dueño los cambió, se vuelve a descargar todo con los nuevos.
       if (n.v === 2) {
         const acc = await CUENTA.rpc('mc2_mi_acceso', { p_espacio: n.espacio });
-        const huella = JSON.stringify(acc);
+        const hu = { rol: acc.rol, chacras: acc.chacras, finanzas: acc.finanzas, usuario_local: acc.usuario_local };
+        if (acc.trabajador) hu.trabajador = acc.trabajador;
+        const huella = JSON.stringify(hu);
+        n.trabajador = acc.trabajador || null; // celular de un trabajador: entra directo a su pantalla
         if (n.permisos && n.permisos !== huella) rehacer = true;
         n.permisos = huella;
       }
@@ -155,7 +158,7 @@ const NUBE = {
       if (this._rehecho) {
         const yo = this._rehecho; this._rehecho = null;
         DB.completar();
-        DB.usuario = typeof yo === 'string' ? DB.get('usuarios', yo) : null;
+        DB.usuario = typeof yo !== 'string' ? null : yo.startsWith('t:') ? sesionTrabajador(yo.slice(2)) : DB.get('usuarios', yo);
         if (DB.usuario) { const vis = DB.chacrasVisibles(); if (!vis.find(c => c.id === DB.chacraId)) DB.chacraId = vis[0] ? vis[0].id : null; }
         toast('Tus permisos cambiaron: la información se actualizó');
         bajados = bajados || 1;

@@ -258,6 +258,12 @@ async function unirmeComoInvitado(e) {
   DB.usuario = null; DB.guardarYa();
   toast('Descargando los datos de ' + e.nombre + '…');
   await NUBE.sincronizar();
+  if (e.rol === 'trabajador') {
+    if (!miTrabajador()) { toast(NUBE.error || 'No se encontró tu ficha. Pide al encargado que sincronice e intenta otra vez.', 'error'); return render(); }
+    render();
+    toast('¡Listo! Te uniste a ' + e.nombre);
+    return ACC.trabCrearPin();
+  }
   const u = DB.get('usuarios', e.usuario_local);
   if (!u) { toast(NUBE.error || 'No se encontró tu usuario. Pide al dueño que sincronice e intenta otra vez.', 'error'); return render(); }
   formulario({
@@ -326,7 +332,7 @@ async function conectarEspacio(e, subirLocal) {
   toast(subirLocal ? 'Subiendo tus datos a tu cuenta…' : 'Descargando tus datos…');
   await NUBE.sincronizar();
   if (NUBE.estado === 'error') toast(NUBE.error, 'error');
-  else toast(subirLocal ? 'Listo: tus datos están en tu cuenta' : 'Listo. Entra con tu usuario y PIN.');
+  else toast(subirLocal ? 'Listo: tus datos están en tu cuenta' : 'Listo. Entra con tu PIN.');
   if (!DB.usuario) ING.uid = e.usuario_local && DB.get('usuarios', e.usuario_local) ? e.usuario_local : null;
   render();
 }

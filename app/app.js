@@ -2,7 +2,7 @@
 /* ==========================================================================
    MI-CHACRA · Arranque, ingreso, menú y navegación
    ========================================================================== */
-window.VERSION = '1.6.0';
+window.VERSION = '1.7.0';
 
 function aplicarTema() {
   const t = DB.d.config.tema;
@@ -42,6 +42,16 @@ function iniciarSesion(u) {
   NUBE.programar(600);
   if (!u.esTrabajador) setTimeout(() => actualizarTienda().then(() => { if (DB.usuario && DB.modo !== 'tienda') { if (location.hash === '#/inicio' && !PILA.length) render(); pedirConsentimiento(); } }), 1500);
 }
+/** Sesión del portal para un trabajador (o null si su ficha no está o está inactiva). */
+function sesionTrabajador(id) {
+  const t = DB.get('trabajadores', id);
+  return t && !t.eliminado && t.activo !== false ? { id: 't:' + t.id, nombre: t.nombre, esTrabajador: true, trabajadorId: t.id } : null;
+}
+/** En el celular de un trabajador invitado (Fase 3), id de su ficha. */
+function miTrabajador() {
+  const n = DB.d.nube;
+  return n && n.v === 2 && n.trabajador ? DB.get('trabajadores', n.trabajador) : null;
+}
 ACC.soyTrabajador = () => {
   if (Date.now() < ING.esperaHasta) return toast('Demasiados intentos. Espera un momento.', 'error');
   formulario({
@@ -71,7 +81,21 @@ function renderIngreso() {
   const us = DB.todos('usuarios').filter(u => u.activo !== false);
   const logo = '<div class="logo">' + ico('marca') + '</div><div class="marca-t">MI-CHACRA</div>';
   let h;
-  if (!us.length) {
+  const miT = miTrabajador();
+  if (miT && (!ING.uid || !String(ING.uid).startsWith('t:'))) { ING.uid = 't:' + miT.id; ING.pin = ''; }
+  if (miT && !miT.pin) {
+    h = '<div class="ingreso">' + logo + '<p class="center">Hola, <b>' + esc(miT.nombre.split(' ')[0]) + '</b>. Crea tu PIN para ver tus latas y pagos.</p>' +
+      '<button class="btn pri bloque" style="margin-top:16px" data-act="trabCrearPin">' + ico('candado') + 'Crear mi PIN</button></div>';
+  } else if (miT) {
+    const espera = Math.ceil((ING.esperaHasta - Date.now()) / 1000);
+    h = '<div class="ingreso"><span class="avatar xl">' + esc(iniciales(miT.nombre)) + '</span><h2 style="margin-top:10px">' + esc(miT.nombre) + '</h2>' +
+      '<p class="muted small" id="pinMsg">' + (espera > 0 ? 'Demasiados intentos. Espera ' + espera + ' s.' : 'Escribe tu PIN') + '</p>' +
+      '<div class="pin-pts">' + [0, 1, 2, 3].map(i => '<i class="' + (i < ING.pin.length ? 'on' : '') + '"></i>').join('') + '</div>' +
+      '<div class="teclado">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'x', '0', '<'].map(k =>
+        k === 'x' ? '<span></span>' : '<button data-act="pinTecla" data-k="' + k + '">' + (k === '<' ? ico('izq') : k) + '</button>').join('') + '</div>' +
+      '<button class="btn ghost bloque chico" style="margin-top:12px" data-act="trabCrearPin" data-olvide="1">Olvidé mi PIN</button>' +
+      '<button class="btn ghost bloque chico" style="margin-top:4px" data-act="trabCerrarSesion">' + ico('salir', 's') + 'Cerrar sesión en este celular</button></div>';
+  } else if (!us.length) {
     h = DB.errorCarga
       ? '<div class="ingreso">' + logo + '<p class="center">No se pudieron leer los datos guardados. Para protegerlos, no crees una chacra nueva todavía.</p>' +
         '<div class="aviso tono-warn">' + ico('alerta', 's') + '<div>Recupera una copia de seguridad de MI-CHACRA. Los datos actuales no se han sobrescrito.</div></div>' +
@@ -112,6 +136,36 @@ function renderIngreso() {
   const f = $('#archivoImp');
   if (f) f.onchange = () => { const a = f.files[0]; if (!a) return; const rd = new FileReader(); rd.onload = () => window.alImportar(rd.result); rd.readAsText(a); };
 }
+/** Crear (u olvidar) el PIN en el celular del trabajador: su cuenta ya prueba quién es. */
+ACC.trabCrearPin = el => {
+  const t = miTrabajador();
+  if (!t) return render();
+  if (el && el.dataset.olvide && !CUENTA.activa()) return toast('Vuelve a entrar con tu correo o Google en Más → Mi cuenta y nube, o pide ayuda al encargado.', 'error');
+  formulario({
+    titulo: t.pin ? 'Nuevo PIN' : 'Hola, ' + t.nombre.split(' ')[0], valores: {}, fija: !t.pin,
+    aviso: 'Lo usarás para abrir la app en este celular y ver tus latas, días y pagos.',
+    campos: [
+      { id: 'pin', et: 'Crea tu PIN de 4 dígitos', tipo: 'pin', req: true, par: true, foco: true, valida: v => /^\d{4}$/.test(v) ? '' : 'Deben ser 4 dígitos' },
+      { id: 'pin2', et: 'Repite el PIN', tipo: 'pin', req: true, valida: (v, x) => v !== x.pin ? 'Los PIN no coinciden' : '' },
+    ],
+    guardar: 'Entrar',
+    alGuardar: async v => {
+      const sal = uid();
+      DB.usuario = sesionTrabajador(t.id);
+      DB.editar('trabajadores', t.id, { sal, pin: await huellaPin(v.pin, sal) }, 'Cambió su PIN', true);
+      DB.guardarYa();
+      cerrarTodas(); iniciarSesion(sesionTrabajador(t.id));
+    },
+  });
+};
+ACC.trabCerrarSesion = async () => {
+  if (!(await confirmar('Cerrar sesión', 'Se borrará de este celular la información de la chacra. Podrás volver a entrar con tu correo o con una nueva invitación.', { si: 'Cerrar sesión', peligro: true }))) return;
+  clearTimeout(NUBE._t);
+  await NUBE.sincronizar(true).catch(() => { }); // sube un reporte pendiente, si hay
+  await CUENTA.salir();
+  DB.d = DB.nuevo(); DB.usuario = null; NUBE.estado = 'apagada'; ING.uid = null; DB.guardarYa();
+  history.replaceState(null, '', location.pathname + '#/'); render(); toast('Sesión cerrada');
+};
 ACC.elegirUsuario = el => { ING.uid = el.dataset.id; ING.pin = ''; render(); };
 ACC.pinOtro = () => { ING.uid = null; ING.pin = ''; render(); };
 ACC.pinTecla = async el => {
@@ -122,9 +176,11 @@ ACC.pinTecla = async el => {
   vibrar(8);
   renderIngreso();
   if (ING.pin.length === 4) {
-    const u = DB.get('usuarios', ING.uid);
+    const esT = String(ING.uid).startsWith('t:');
+    const u = esT ? DB.get('trabajadores', ING.uid.slice(2)) : DB.get('usuarios', ING.uid);
+    if (!u) { ING.uid = null; ING.pin = ''; return render(); }
     const h = await huellaPin(ING.pin, u.sal);
-    if (h === u.pin) { iniciarSesion(u); return; }
+    if (h === u.pin) { const s = esT ? sesionTrabajador(u.id) : u; if (s) { iniciarSesion(s); return; } }
     ING.fallos++; ING.pin = '';
     if (ING.fallos >= 5) { ING.esperaHasta = Date.now() + 30000; ING.fallos = 0; setTimeout(renderIngreso, 30500); }
     vibrar(120);
