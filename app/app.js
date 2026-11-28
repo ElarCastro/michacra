@@ -2,7 +2,7 @@
 /* ==========================================================================
    MI-CHACRA · Arranque, ingreso, menú y navegación
    ========================================================================== */
-window.VERSION = '1.5.0';
+window.VERSION = '1.6.0';
 
 function aplicarTema() {
   const t = DB.d.config.tema;
@@ -80,10 +80,14 @@ function renderIngreso() {
       : CUENTA.activa()
       ? '<div class="ingreso">' + logo + '<p class="center muted">Entraste como <b>' + esc(CUENTA.email()) + '</b>.</p>' +
         '<button class="btn pri bloque" style="margin-top:16px" data-act="cuentaContinuar">' + ico('nube_ok') + 'Continuar</button>' +
+        '<button class="btn bloque" style="margin-top:8px" data-act="tengoInvitacion">' + ico('personas') + 'Tengo una invitación</button>' +
         '<button class="btn ghost bloque" style="margin-top:8px" data-act="cuentaSalir">' + ico('salir') + 'Usar otra cuenta</button></div>'
       : '<div class="ingreso">' + logo + '<p class="center muted">Controla tus trabajadores, la cosecha y los pagos de tu chacra, aunque no haya señal.</p>' +
-      '<button class="btn pri bloque" style="margin-top:16px" data-act="entrarGoogle">' + ico('google') + 'Entrar con Google</button>' +
-      '<button class="btn bloque" style="margin-top:8px" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button>' +
+      (CUENTA.googleActivo()
+        ? '<button class="btn pri bloque" style="margin-top:16px" data-act="entrarGoogle">' + ico('google') + 'Entrar con Google</button>' +
+          '<button class="btn bloque" style="margin-top:8px" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button>'
+        : '<button class="btn pri bloque" style="margin-top:16px" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button>') +
+      '<button class="btn bloque" style="margin-top:8px" data-act="tengoInvitacion">' + ico('personas') + 'Tengo una invitación</button>' +
       '<p class="center small muted" style="margin:14px 0 4px">Tu cuenta guarda tus datos y te deja usar la app en varios celulares. Es gratis.</p>' +
       '<button class="btn ghost bloque" style="margin-top:4px" data-act="configurar">Usar sin cuenta (solo en este celular)</button>' +
       '<button class="btn ghost bloque" style="margin-top:4px" data-act="importar">' + ico('subir') + 'Tengo una copia de seguridad</button>' +
@@ -341,4 +345,10 @@ aplicarTema();
 })();
 /* Volver de Google (web) o de un enlace pendiente (Android). */
 setTimeout(() => window.alVolverAuth && window.alVolverAuth(), 300);
+/* Si cambia lo que el servidor permite (por ejemplo, se activa Google), volver a dibujar la bienvenida. */
+setTimeout(async () => {
+  const antes = CUENTA.googleActivo();
+  await CUENTA.ajustes();
+  if (CUENTA.googleActivo() !== antes && !DB.usuario && !PILA.length) render();
+}, 600);
 ACC.cuentaContinuar = () => trasEntrar();

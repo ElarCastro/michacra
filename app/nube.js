@@ -108,7 +108,15 @@ const NUBE = {
     this.ocupado = true; this.estado = 'sincronizando'; pintarIndicador();
     const n = this.cfg();
     let bajados = 0;
+    let rehacer = false;
     try {
+      // v2: revisar mis permisos. Si el dueño los cambió, se vuelve a descargar todo con los nuevos.
+      if (n.v === 2) {
+        const acc = await CUENTA.rpc('mc2_mi_acceso', { p_espacio: n.espacio });
+        const huella = JSON.stringify(acc);
+        if (n.permisos && n.permisos !== huella) rehacer = true;
+        n.permisos = huella;
+      }
       // 1) Subir lo pendiente
       const claves = Object.keys(n.pend || {});
       for (let i = 0; i < claves.length; i += LOTE_SUBIDA) {
@@ -118,6 +126,12 @@ const NUBE = {
         if (envio.length) await this.subirLote(envio);
         for (const reg of lote) { const k = reg.col + '|' + reg.id; const act = this.registroDe(reg.col, reg.id); if (!act || act.mod === reg.mod) delete n.pend[k]; }
         for (const k of claves.slice(i, i + LOTE_SUBIDA)) if (!lote.find(r => r.col + '|' + r.id === k)) delete n.pend[k];
+      }
+      // Permisos cambiados: empezar de cero con lo que ahora me corresponde (lo pendiente ya se subió).
+      if (rehacer) {
+        const yo = DB.usuario && DB.usuario.id;
+        DB.d = DB.nuevo(); DB.d.nube = n; n.version = 0; n.pend = {};
+        this._rehecho = yo || true;
       }
       // 2) Bajar lo nuevo de otros celulares
       for (let vueltas = 0; vueltas < 200; vueltas++) {
@@ -133,9 +147,19 @@ const NUBE = {
     } catch (e) {
       this.error = e.message;
       this.estado = e.red ? 'sinred' : 'error';
+      if (/^ACCESO_QUITADO/.test(e.message)) this._quitado = true;
       if (!silencioso && !e.red) console.warn('Nube:', e.message);
     } finally {
       this.ocupado = false;
+      if (this._quitado) { this._quitado = false; if (window.accesoQuitado) window.accesoQuitado(); return 0; }
+      if (this._rehecho) {
+        const yo = this._rehecho; this._rehecho = null;
+        DB.completar();
+        DB.usuario = typeof yo === 'string' ? DB.get('usuarios', yo) : null;
+        if (DB.usuario) { const vis = DB.chacrasVisibles(); if (!vis.find(c => c.id === DB.chacraId)) DB.chacraId = vis[0] ? vis[0].id : null; }
+        toast('Tus permisos cambiaron: la información se actualizó');
+        bajados = bajados || 1;
+      }
       DB.guardarYa();
       pintarIndicador();
       if (bajados && !PILA.length && DB.usuario) { const y = window.scrollY; render(); window.scrollTo(0, y); }
@@ -226,8 +250,10 @@ VISTAS.nube = () => {
       '<div class="kpis"><div class="kpi"><div class="l">Registros en este celular</div><div class="v">' + cant(tot) + '</div></div><div class="kpi"><div class="l">Por subir</div><div class="v">' + NUBE.pendientes() + '</div></div></div>' +
       '<button class="btn pri bloque" data-act="nubeSync" style="margin-bottom:10px">' + ico('restaurar') + 'Sincronizar ahora</button>';
   };
-  const botonesEntrar = '<div class="btns" style="margin-bottom:8px"><button class="btn pri" data-act="entrarGoogle">' + ico('google') + 'Entrar con Google</button></div>' +
-    '<div class="btns"><button class="btn" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button></div>';
+  const botonesEntrar = CUENTA.googleActivo()
+    ? '<div class="btns" style="margin-bottom:8px"><button class="btn pri" data-act="entrarGoogle">' + ico('google') + 'Entrar con Google</button></div>' +
+      '<div class="btns"><button class="btn" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button></div>'
+    : '<div class="btns"><button class="btn pri" data-act="entrarCorreo">' + ico('correo') + 'Entrar con mi correo</button></div>';
 
   /* ----- Nube nueva: cuenta personal + espacio ----- */
   if (v2 && NUBE.activa()) {
@@ -238,7 +264,8 @@ VISTAS.nube = () => {
       '<button class="btn chico bloque" data-act="nubeTodo" style="margin-bottom:8px">Volver a descargar todo de la nube</button>' +
       '<button class="btn chico bloque" data-act="cuentaSalir" style="margin-bottom:8px">' + ico('salir', 's') + 'Cerrar sesión en este celular</button>' +
       (esDueno ? '<button class="btn chico bloque peligro" data-act="nubeEliminar">' + ico('borrar', 's') + 'Eliminar mi cuenta y mis datos de la nube</button>' : '') + '</div>';
-    h += '<p class="small muted">Invitar a tu encargado y a tus trabajadores llega en la próxima versión.</p>';
+    h += esDueno ? '<div class="card"><h3>Tu equipo</h3><p class="small muted" style="margin:0 0 10px">Invita a tu encargado, supervisor u operario para que use la app en <b>su propio celular</b>, con su cuenta y solo con los permisos de su rol.</p>' +
+      '<button class="btn bloque" data-act="ir" data-ruta="usuarios">' + ico('personas') + 'Usuarios e invitaciones</button></div>' : '';
     return { titulo: 'Mi cuenta y nube', atras: true, html: h };
   }
 
@@ -265,7 +292,9 @@ VISTAS.nube = () => {
 
   /* ----- Nube antigua (con código compartido) ----- */
   if (!v2 && NUBE.activa()) {
-    h += '<div class="card"><h3>Nube antigua (con código)</h3><p class="small muted" style="margin:0 0 10px">Este celular sigue conectado con el código compartido. Te recomendamos pasar tus datos a tu cuenta personal (arriba).</p>' + estado();
+    h += '<div class="card"><h3>Nube antigua (con código)</h3><p class="small muted" style="margin:0 0 10px">Este celular sigue conectado con el código compartido. ' +
+      (esDueno ? 'Te recomendamos pasar tus datos a tu cuenta personal (arriba) y luego invitar a tu equipo.' : 'Si el dueño ya pasó a su cuenta personal, este celular dejará de recibir cambios: <b>pídele una invitación</b> y toca "Tengo una invitación".') + '</p>' + estado() +
+      (!esDueno ? '<button class="btn chico bloque" data-act="tengoInvitacion" style="margin-bottom:8px">' + ico('personas', 's') + 'Tengo una invitación</button>' : '');
     if (esDueno) h += '<button class="btn chico bloque" data-act="nubeCompartir" style="margin-bottom:8px">' + ico('whatsapp', 's') + 'Compartir código de conexión</button>' +
       '<button class="btn chico bloque" data-act="nubeDesconectar" style="margin-bottom:8px">Desconectar este celular</button>' +
       '<button class="btn chico bloque peligro" data-act="nubeEliminar">' + ico('borrar', 's') + 'Eliminar la cuenta antigua de la nube</button>';

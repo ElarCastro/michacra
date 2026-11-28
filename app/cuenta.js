@@ -79,8 +79,13 @@ const CUENTA = {
   async ajustes() {
     if (this._ajustes) return this._ajustes;
     try { this._ajustes = await this.pedir('settings', null, null, 'GET'); } catch (e) { this._ajustes = null; }
+    if (this._ajustes && this._ajustes.external) {
+      try { localStorage.setItem('michacra_google', this._ajustes.external.google ? '1' : '0'); } catch (e) { }
+    }
     return this._ajustes;
   },
+  /** ¿Mostrar el botón de Google? Solo si el servidor lo tiene activado (se recuerda para usar sin señal). */
+  googleActivo() { try { return localStorage.getItem('michacra_google') === '1'; } catch (e) { return false; } },
 
   /* ---------- Correo: enlace para tocar (y código, si la plantilla lo incluye) ---------- */
   async retoPkce() {
@@ -189,19 +194,99 @@ window.alVolverAuth = async () => {
 };
 
 /* ---------- Después de entrar: elegir, crear o unir un espacio ---------- */
+const CLAVE_INV = 'michacra_invitacion';
 async function trasEntrar() {
+  // Si tocó "Tengo una invitación" antes de entrar, ahora pedimos el código.
+  let pendienteInv = false; try { pendienteInv = localStorage.getItem(CLAVE_INV) === '1'; localStorage.removeItem(CLAVE_INV); } catch (e) { }
+  if (pendienteInv) return pedirInvitacion();
   let espacios;
   try { espacios = await CUENTA.rpc('mc2_mis_espacios') || []; } catch (e) { return toast(e.message, 'error'); }
   const n = DB.d.nube;
   if (n && n.v === 2 && n.activa) { await NUBE.sincronizar(); return render(); }
   const tengoDatos = DB.todos('usuarios').length > 0;
   if (!tengoDatos) {
-    if (!espacios.length) { toast('Ahora crea tu chacra'); return ACC.configurar(); }
+    if (!espacios.length) return ofrecerCrearOInvitacion();
     if (espacios.length === 1) return conectarEspacio(espacios[0], false);
     return elegirEspacio(espacios, false);
   }
   return elegirEspacio(espacios, true);
 }
+/** Cuenta nueva sin espacios: ¿es dueño (crea su chacra) o lo invitaron? */
+function ofrecerCrearOInvitacion() {
+  const h = abrirHoja(cabHoja('¿Qué quieres hacer?') +
+    '<button class="btn pri bloque" data-x="crear" style="margin-bottom:8px">' + ico('semilla') + 'Crear mi chacra (soy dueño)</button>' +
+    '<button class="btn bloque" data-x="inv">' + ico('correo') + 'Tengo una invitación</button>' +
+    '<p class="small muted" style="margin-top:10px">Si trabajas en la chacra de otra persona, pídele una invitación: así verás solo lo que te corresponde.</p>');
+  h.querySelector('[data-x=crear]').onclick = () => { cerrarTodas(); ACC.configurar(); };
+  h.querySelector('[data-x=inv]').onclick = () => { cerrarTodas(); pedirInvitacion(); };
+}
+
+/* ---------- Invitaciones (Fase 2) ---------- */
+ACC.tengoInvitacion = () => {
+  if (CUENTA.activa()) return pedirInvitacion();
+  try { localStorage.setItem(CLAVE_INV, '1'); } catch (e) { }
+  const h = abrirHoja(cabHoja('Tengo una invitación') +
+    '<p class="muted" style="margin:0 0 12px">Primero entra con <b>tu</b> correo o tu cuenta de Google. Luego escribirás el código que te enviaron.</p>' +
+    (CUENTA.googleActivo() ? '<button class="btn pri bloque" data-x="g" style="margin-bottom:8px">' + ico('google') + 'Entrar con Google</button>' : '') +
+    '<button class="btn bloque" data-x="c">' + ico('correo') + 'Entrar con mi correo</button>');
+  const g = h.querySelector('[data-x=g]'); if (g) g.onclick = () => { cerrarTodas(); ACC.entrarGoogle(); };
+  h.querySelector('[data-x=c]').onclick = () => { cerrarTodas(); ACC.entrarCorreo(); };
+};
+function pedirInvitacion() {
+  formulario({
+    titulo: 'Escribe tu código de invitación', valores: {},
+    aviso: 'Te lo envió el dueño de la chacra por WhatsApp. Tiene esta forma: <b>MC-XXXX-XXXX</b>.',
+    campos: [{ id: 'codigo', et: 'Código', tipo: 'texto', req: true, foco: true, ph: 'MC-7K4Q-9XPA',
+      valida: v => v.replace(/[^A-Za-z0-9]/g, '').replace(/^MC/i, '').length === 8 ? '' : 'Revisa el código: son 8 letras o números después de MC-' }],
+    guardar: 'Unirme',
+    alGuardar: async x => {
+      let e;
+      try { e = await CUENTA.rpc('mc2_aceptar', { p_codigo: x.codigo }); } catch (err) { return err.message; }
+      cerrarTodas();
+      await unirmeComoInvitado(e);
+      return false;
+    },
+  });
+}
+/** Une este celular al espacio del dueño como el usuario invitado y le pide crear su PIN. */
+async function unirmeComoInvitado(e) {
+  const otros = DB.todos('usuarios').length > 0 && !(DB.d.nube && DB.d.nube.espacio === e.id);
+  if (otros && !(await confirmar('Este celular ya tiene datos', 'Para unirte a <b>' + esc(e.nombre) + '</b>, los datos que hay en este celular se reemplazarán por los de esa chacra. Si son tuyos, guarda antes una copia de seguridad.', { si: 'Reemplazar y unirme', peligro: true }))) return;
+  clearTimeout(NUBE._t);
+  DB.d = DB.nuevo();
+  DB.d.nube = { v: 2, activa: true, espacio: e.id, nombre: e.nombre, version: 0, pend: {} };
+  DB.usuario = null; DB.guardarYa();
+  toast('Descargando los datos de ' + e.nombre + '…');
+  await NUBE.sincronizar();
+  const u = DB.get('usuarios', e.usuario_local);
+  if (!u) { toast(NUBE.error || 'No se encontró tu usuario. Pide al dueño que sincronice e intenta otra vez.', 'error'); return render(); }
+  formulario({
+    titulo: 'Hola, ' + u.nombre.split(' ')[0], valores: {}, fija: true,
+    aviso: 'Te uniste a <b>' + esc(e.nombre) + '</b>. Crea tu PIN: lo usarás para abrir la app cada día en este celular.',
+    campos: [
+      { id: 'pin', et: 'Crea tu PIN de 4 dígitos', tipo: 'pin', req: true, par: true, valida: v => /^\d{4}$/.test(v) ? '' : 'Deben ser 4 dígitos' },
+      { id: 'pin2', et: 'Repite el PIN', tipo: 'pin', req: true, valida: (v, x) => v !== x.pin ? 'Los PIN no coinciden' : '' },
+    ],
+    guardar: 'Entrar',
+    alGuardar: async v => {
+      const sal = uid();
+      DB.usuario = u;
+      DB.editar('usuarios', u.id, { sal, pin: await huellaPin(v.pin, sal) }, 'Cambió su PIN', true);
+      DB.d.ultimoUsuario = u.id; DB.guardarYa();
+      cerrarTodas(); iniciarSesion(DB.get('usuarios', u.id));
+      toast('¡Listo! Ya estás en ' + e.nombre);
+    },
+  });
+}
+
+/** El dueño quitó el acceso: se borra la copia local de sus datos. */
+window.accesoQuitado = () => {
+  clearTimeout(NUBE._t);
+  const nombre = (DB.d.nube && DB.d.nube.nombre) || 'la chacra';
+  DB.d = DB.nuevo(); DB.usuario = null; NUBE.estado = 'apagada'; DB.guardarYa();
+  cerrarTodas(); history.replaceState(null, '', location.pathname + '#/'); render();
+  setTimeout(() => confirmar('Ya no tienes acceso', 'El dueño de <b>' + esc(nombre) + '</b> quitó tu acceso. Por seguridad se borraron de este celular los datos de esa chacra. Si es un error, pídele una nueva invitación.', { si: 'Entendido' }), 300);
+};
 
 /** Muestra los espacios de la cuenta. conDatos: este celular ya tiene datos que se subirán. */
 function elegirEspacio(espacios, conDatos) {
@@ -242,7 +327,7 @@ async function conectarEspacio(e, subirLocal) {
   await NUBE.sincronizar();
   if (NUBE.estado === 'error') toast(NUBE.error, 'error');
   else toast(subirLocal ? 'Listo: tus datos están en tu cuenta' : 'Listo. Entra con tu usuario y PIN.');
-  if (!DB.usuario) ING.uid = null;
+  if (!DB.usuario) ING.uid = e.usuario_local && DB.get('usuarios', e.usuario_local) ? e.usuario_local : null;
   render();
 }
 

@@ -563,11 +563,67 @@ ACC.laborEditar = el => {
 VISTAS.usuarios = () => {
   if (!DB.puede('usuarios')) return { titulo: 'Usuarios', atras: true, html: vacio('candado', 'Solo el dueño gestiona usuarios') };
   const us = DB.todos('usuarios');
-  const h = '<div class="lista">' + us.map(u => '<div class="fila" data-act="usuarioEditar" data-id="' + u.id + '"><span class="avatar">' + esc(iniciales(u.nombre)) + '</span><div class="cuerpo-f"><div class="t">' + esc(u.nombre) + ' ' +
+  const conCuenta = NUBE.esV2() && NUBE.activa();
+  if (conCuenta) cargarEquipo();
+  const eq = EQUIPO.datos;
+  const estadoNube = u => {
+    if (!conCuenta || u.dueno) return '';
+    const m = eq && eq.miembros.find(x => x.usuario_local === u.id && x.activo);
+    const inv = eq && eq.invitaciones.find(x => x.usuario_local === u.id);
+    const est = !eq ? '' : m ? pill('Conectado', 'ok') + ' <span class="small muted">' + esc(m.email || '') + '</span>'
+      : inv ? pill('Invitación enviada', 'info') + ' <span class="small muted">vence ' + fecha(String(inv.vence).slice(0, 10)) + '</span>' : pill('Sin celular', 'warn');
+    const btn = u.activo === false ? '' : m
+      ? '<button class="btn chico peligro" data-act="quitarAccesoUsuario" data-id="' + u.id + '">' + ico('candado', 's') + 'Quitar acceso</button>'
+      : '<button class="btn chico" data-act="invitarUsuario" data-id="' + u.id + '">' + ico('whatsapp', 's') + (inv ? 'Reenviar invitación' : 'Invitar a su celular') + '</button>';
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">' + est + btn + '</div>';
+  };
+  const h = (conCuenta ? '' : '<div class="aviso tono-info small">' + ico('info', 's') + '<div>Para que cada persona use la app en <b>su propio celular</b>, entra con tu cuenta en <b>Más → Mi cuenta y nube</b> y luego invítala desde aquí.</div></div>') +
+    '<div class="lista">' + us.map(u => '<div class="fila" data-act="usuarioEditar" data-id="' + u.id + '"><span class="avatar">' + esc(iniciales(u.nombre)) + '</span><div class="cuerpo-f"><div class="t">' + esc(u.nombre) + ' ' +
     (u.dueno ? pill('Dueño', 'ok') : '') + (u.activo === false ? pill('Sin acceso', 'warn') : '') + '</div><div class="d">' +
-    (u.dueno ? 'Acceso total' : esc((u.accesos || []).map(a => ((DB.get('chacras', a.chacraId) || {}).nombre || '?') + ': ' + ROLES[a.rol].t).join(' · ') || 'Sin chacras')) + '</div></div>' + ico('editar', 's') + '</div>').join('') + '</div>' +
+    (u.dueno ? 'Acceso total' : esc((u.accesos || []).map(a => ((DB.get('chacras', a.chacraId) || {}).nombre || '?') + ': ' + ROLES[a.rol].t).join(' · ') || 'Sin chacras')) + '</div>' + estadoNube(u) + '</div>' + ico('editar', 's') + '</div>').join('') + '</div>' +
     '<div class="card tono-info small">' + Object.keys(ROLES).map(k => '<b>' + ROLES[k].t + ':</b> ' + ROLES[k].d).join('<br>') + '</div>';
   return { titulo: 'Usuarios y permisos', atras: true, html: h, fab: { t: 'Nuevo usuario', icono: 'mas', act: 'usuarioEditar' } };
+};
+
+/* ---------- Equipo en la nube (invitaciones y accesos) ---------- */
+const EQUIPO = { datos: null, cargando: false, de: null };
+async function cargarEquipo(forzar) {
+  const n = NUBE.cfg();
+  if (!n || n.v !== 2 || EQUIPO.cargando) return;
+  if (!forzar && EQUIPO.de === n.espacio && EQUIPO.datos) return;
+  EQUIPO.cargando = true;
+  try { EQUIPO.datos = await CUENTA.rpc('mc2_equipo', { p_espacio: n.espacio }); EQUIPO.de = n.espacio; } catch (e) { EQUIPO.datos = null; }
+  EQUIPO.cargando = false;
+  if (location.hash === '#/usuarios' && !PILA.length) render();
+}
+ACC.invitarUsuario = async el => {
+  const u = DB.get('usuarios', el.dataset.id);
+  if (!u) return;
+  toast('Preparando la invitación…');
+  await NUBE.sincronizar(true); // el usuario y sus permisos deben estar en la nube
+  if (NUBE.estado === 'sinred') return toast('Necesitas internet para invitar', 'error');
+  let r;
+  try { r = await CUENTA.rpc('mc2_invitar', { p_espacio: NUBE.cfg().espacio, p_usuario_local: u.id }); } catch (e) { return toast(e.message, 'error'); }
+  const ch = (DB.todos('chacras').find(c => (u.accesos || []).some(a => a.chacraId === c.id)) || {}).nombre || 'mi chacra';
+  const rol = ({ admin: 'Administrador', supervisor: 'Supervisor', operario: 'Operario' })[r.rol] || r.rol;
+  const txt = 'Hola ' + u.nombre.split(' ')[0] + ', te invito a MI-CHACRA (' + ch + ') como ' + rol + '.\n\n' +
+    '1) Instala la app desde Play Store: https://play.google.com/apps/internaltest/4700642312873271512\n' +
+    '   o úsala en el navegador: https://elarcastro.github.io/michacra/app/\n' +
+    '2) Entra con tu correo o con Google.\n' +
+    '3) Toca "Tengo una invitación" y escribe este código: ' + r.codigo + '\n\n(El código sirve una sola vez y vence en 7 días.)';
+  const h = abrirHoja(cabHoja('Invitación para ' + u.nombre) +
+    '<p class="muted small" style="margin:0 0 6px">Código de un solo uso, vence el ' + fecha(String(r.vence).slice(0, 10)) + ':</p>' +
+    '<p style="font-size:30px;font-weight:700;letter-spacing:3px;text-align:center;margin:8px 0 14px">' + esc(r.codigo) + '</p>' +
+    '<button class="btn pri bloque" data-x="wa">' + ico('whatsapp') + 'Enviar por WhatsApp</button>' +
+    '<p class="small muted" style="margin-top:10px">Entrará como <b>' + esc(rol) + '</b> y verá solo lo que su rol permite. Puedes quitarle el acceso cuando quieras.</p>');
+  h.querySelector('[data-x=wa]').onclick = () => compartirTexto(txt);
+  cargarEquipo(true);
+};
+ACC.quitarAccesoUsuario = async el => {
+  const u = DB.get('usuarios', el.dataset.id);
+  if (!u || !(await confirmar('Quitar acceso a ' + u.nombre, 'Su celular dejará de recibir y enviar datos de inmediato, y se borrará la copia de tus datos que tiene. Puedes volver a invitarlo después.', { si: 'Quitar acceso', peligro: true }))) return;
+  try { await CUENTA.rpc('mc2_quitar', { p_espacio: NUBE.cfg().espacio, p_usuario_local: u.id }); } catch (e) { return toast(e.message, 'error'); }
+  toast('Acceso quitado'); cargarEquipo(true);
 };
 ACC.usuarioEditar = el => {
   const u = el.dataset.id ? DB.get('usuarios', el.dataset.id) : null;
