@@ -201,10 +201,12 @@ async function trasEntrar() {
   if (pendienteInv) return pedirInvitacion();
   let espacios;
   try { espacios = await CUENTA.rpc('mc2_mis_espacios') || []; } catch (e) { return toast(e.message, 'error'); }
+  await actualizarMisTiendas();
   const n = DB.d.nube;
   if (n && n.v === 2 && n.activa) { await NUBE.sincronizar(); return render(); }
   const tengoDatos = DB.todos('usuarios').length > 0;
   if (!tengoDatos) {
+    if (!espacios.length && misTiendas().length) return entrarComoTienda(); // cuenta solo de tienda
     if (!espacios.length) return ofrecerCrearOInvitacion();
     if (espacios.length === 1) return conectarEspacio(espacios[0], false);
     return elegirEspacio(espacios, false);
@@ -215,8 +217,10 @@ async function trasEntrar() {
 function ofrecerCrearOInvitacion() {
   const h = abrirHoja(cabHoja('¿Qué quieres hacer?') +
     '<button class="btn pri bloque" data-x="crear" style="margin-bottom:8px">' + ico('semilla') + 'Crear mi chacra (soy dueño)</button>' +
-    '<button class="btn bloque" data-x="inv">' + ico('correo') + 'Tengo una invitación</button>' +
+    '<button class="btn bloque" data-x="inv" style="margin-bottom:8px">' + ico('correo') + 'Tengo una invitación</button>' +
+    '<button class="btn bloque" data-x="ven">' + ico('tienda') + 'Tengo una tienda (quiero vender)</button>' +
     '<p class="small muted" style="margin-top:10px">Si trabajas en la chacra de otra persona, pídele una invitación: así verás solo lo que te corresponde.</p>');
+  h.querySelector('[data-x=ven]').onclick = () => { cerrarTodas(); ACC.quieroVender(); };
   h.querySelector('[data-x=crear]').onclick = () => { cerrarTodas(); ACC.configurar(); };
   h.querySelector('[data-x=inv]').onclick = () => { cerrarTodas(); pedirInvitacion(); };
 }
@@ -241,8 +245,14 @@ function pedirInvitacion() {
     guardar: 'Unirme',
     alGuardar: async x => {
       let e;
-      try { e = await CUENTA.rpc('mc2_aceptar', { p_codigo: x.codigo }); } catch (err) { return err.message; }
+      try { e = await CUENTA.rpc('mc2_usar_codigo', { p_codigo: x.codigo }); } catch (err) { return err.message; }
       cerrarTodas();
+      if (e.tipo === 'tienda') { // ayudante de una tienda del mercado
+        DB.d.miTiendaId = e.id; await actualizarMisTiendas();
+        toast('¡Listo! Ahora atiendes la tienda ' + e.nombre);
+        if (DB.usuario && !DB.usuario.esTrabajador) ACC.modoTienda(); else if (!DB.todos('usuarios').length) entrarComoTienda(); else render();
+        return false;
+      }
       await unirmeComoInvitado(e);
       return false;
     },
@@ -347,7 +357,10 @@ ACC.cuentaSalir = async () => {
   const pend = NUBE.pendientes();
   if (!(await confirmar('Cerrar sesión en este celular', 'Tus datos se quedan en este celular, pero ya no se sincronizarán hasta que vuelvas a entrar.' + (pend ? ' <b>Hay ' + pend + ' cambios sin subir.</b>' : ''), { si: 'Cerrar sesión', peligro: !!pend }))) return;
   await CUENTA.salir();
-  if (DB.d.nube && DB.d.nube.v === 2) { DB.d.nube = null; NUBE.estado = 'apagada'; DB.guardarYa(); }
+  DB.d.misTiendas = []; DB.d.esAdmin = false;
+  if (DB.d.nube && DB.d.nube.v === 2) { DB.d.nube = null; NUBE.estado = 'apagada'; }
+  DB.guardarYa();
+  if (DB.usuario && DB.usuario.soloTienda) { DB.usuario = null; ponerModo('chacra'); history.replaceState(null, '', location.pathname + '#/'); }
   render(); toast('Sesión cerrada');
 };
 

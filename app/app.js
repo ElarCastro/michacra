@@ -2,7 +2,7 @@
 /* ==========================================================================
    MI-CHACRA · Arranque, ingreso, menú y navegación
    ========================================================================== */
-window.VERSION = '1.7.0';
+window.VERSION = '1.8.0';
 
 function aplicarTema() {
   const t = DB.d.config.tema;
@@ -40,7 +40,10 @@ function iniciarSesion(u) {
   render();
   setTimeout(programarAvisos, 800);
   NUBE.programar(600);
-  if (!u.esTrabajador) setTimeout(() => actualizarTienda().then(() => { if (DB.usuario && DB.modo !== 'tienda') { if (location.hash === '#/inicio' && !PILA.length) render(); pedirConsentimiento(); } }), 1500);
+  if (!u.esTrabajador) setTimeout(() => {
+    revisarAdmin().then(c => { if (c && location.hash === '#/mas' && !PILA.length) render(); });
+    actualizarTienda().then(() => { if (DB.usuario && DB.modo !== 'tienda') { if (location.hash === '#/inicio' && !PILA.length) render(); pedirConsentimiento(); } });
+  }, 1500);
 }
 /** Sesión del portal para un trabajador (o null si su ficha no está o está inactiva). */
 function sesionTrabajador(id) {
@@ -105,6 +108,8 @@ function renderIngreso() {
       ? '<div class="ingreso">' + logo + '<p class="center muted">Entraste como <b>' + esc(CUENTA.email()) + '</b>.</p>' +
         '<button class="btn pri bloque" style="margin-top:16px" data-act="cuentaContinuar">' + ico('nube_ok') + 'Continuar</button>' +
         '<button class="btn bloque" style="margin-top:8px" data-act="tengoInvitacion">' + ico('personas') + 'Tengo una invitación</button>' +
+        (misTiendas().length ? '<button class="btn bloque" style="margin-top:8px" data-act="abrirMiTienda">' + ico('tienda') + 'Abrir mi tienda</button>'
+          : '<button class="btn ghost bloque" style="margin-top:8px" data-act="quieroVender">' + ico('tienda') + 'Tengo una tienda: quiero vender</button>') +
         '<button class="btn ghost bloque" style="margin-top:8px" data-act="cuentaSalir">' + ico('salir') + 'Usar otra cuenta</button></div>'
       : '<div class="ingreso">' + logo + '<p class="center muted">Controla tus trabajadores, la cosecha y los pagos de tu chacra, aunque no haya señal.</p>' +
       (CUENTA.googleActivo()
@@ -253,7 +258,7 @@ const LATERAL = [
   { r: 'cuentas', i: 'billetera', t: 'Cuentas', p: 'finanzas' },
   { r: 'caja', i: 'dinero', t: 'Flujo de caja', p: 'finanzas' },
   { r: 'ganancia', i: 'bandera', t: 'Ganancia', p: 'finanzas' },
-  { r: 'tienda', i: 'tienda', t: 'Tienda CHINCARMAS' },
+  { r: 'tienda', i: 'tienda', t: 'Mercado' },
   { r: 't_panel', i: 'tienda', t: 'Modo tienda', p: '_tienda' },
   { r: 'informes', i: 'excel', t: 'Informes' },
   { r: 'reportes', i: 'alerta', t: 'Reportes de trabajadores', p: 'reportes' },
@@ -268,7 +273,7 @@ const LATERAL = [
 const PADRE = { trabajador: 'trabajadores', liquidacion: 'pagos', contrata: 'contratas', contratas: 'pagos', trabajadores: 'mas', parcelas: 'mas', campanias: 'mas',
   chacras: 'mas', cultivos: 'mas', labores: 'mas', usuarios: 'mas', ajustes: 'mas', historial: 'mas', papelera: 'mas', respaldo: 'mas',
   venta: 'ventas', clientes: 'ventas', cliente: 'clientes', ingresos: 'ventas', ventas: 'mas', gastos: 'mas', inversiones: 'gastos', ganancia: 'mas',
-  parcela: 'parcelas', reportes: 'mas', abonos: 'mas', inventario: 'mas', producto: 'inventario', calendario: 'mas', cuentas: 'mas', caja: 'mas', informes: 'mas', nube: 'mas', tienda: 'mas', carrito: 'tienda', mispedidos: 'tienda', mipedido: 'mispedidos' };
+  parcela: 'parcelas', reportes: 'mas', abonos: 'mas', inventario: 'mas', producto: 'inventario', calendario: 'mas', cuentas: 'mas', caja: 'mas', informes: 'mas', nube: 'mas', tienda: 'mas', tiendav: 'tienda', carrito: 'tienda', mispedidos: 'tienda', mipedido: 'mispedidos', admin: 'mas', admin_t: 'admin' };
 
 let rutaAnterior = null;
 function render() {
@@ -318,12 +323,12 @@ const NAV_T = [
 ];
 function renderTienda() {
   const partes = location.hash.replace(/^#\/?/, '').split('/');
-  const ruta = VISTAS[partes[0]] && (partes[0].startsWith('t_') || partes[0] === 'nube' || partes[0] === 'tienda') ? partes[0] : 't_panel';
+  const ruta = VISTAS[partes[0]] && (partes[0].startsWith('t_') || ['nube', 'tienda', 'tiendav', 'carrito', 'mispedidos', 'mipedido', 'admin', 'admin_t'].includes(partes[0])) ? partes[0] : 't_panel';
   let v;
   try { v = VISTAS[ruta](partes[1]); }
   catch (e) { console.error(e); v = { titulo: 'Error', html: vacio('alerta', 'Algo salió mal.', '<p class="small faint">' + esc(e.message) + '</p>') }; }
   const rol = rolTienda();
-  const navs = NAV_T.filter(x => !x.admin || rol === 'admin');
+  const navs = NAV_T.filter(x => !x.admin || rol === 'dueno');
   const on = r => r === ruta || (ruta === 't_pedido' && r === 't_pedidos');
   const lateral = '<nav class="lateral" aria-label="Navegación de la tienda"><div class="marca">' + ico('tienda') + 'MODO TIENDA</div>' + navs.map(x => '<a href="#/' + x.r + '" class="' + (on(x.r) ? 'on' : '') + '"' + (on(x.r) ? ' aria-current="page"' : '') + '>' + ico(x.i) + x.t + '</a>').join('') + '</nav>';
   const top = '<header class="top">' + (v.atras ? '<button class="icon-btn" data-act="volver" aria-label="Atrás">' + ico('atras') + '</button>' : '') +
@@ -398,6 +403,7 @@ aplicarTema();
   if (us.length === 1 && !DB.d.config.pedirPin) { iniciarSesion(us[0]); return; }
   if (us.length && DB.d.ultimoUsuario && us.find(u => u.id === DB.d.ultimoUsuario)) ING.uid = DB.d.ultimoUsuario;
   render();
+  if (!us.length && CUENTA.activa()) actualizarMisTiendas().then(c => { if (c && !DB.usuario && !PILA.length) render(); });
 })();
 /* Volver de Google (web) o de un enlace pendiente (Android). */
 setTimeout(() => window.alVolverAuth && window.alVolverAuth(), 300);

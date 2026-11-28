@@ -355,10 +355,12 @@ VISTAS.mas = () => {
       (DB.puede('usuarios') ? fila('usuarios', 'escudo', 'Usuarios y permisos', 'Quién entra y qué puede hacer') : '') +
       fila('ajustes', 'ajustes', 'Ajustes', 'Tema, semana de pago, PIN') + '</div>';
   }
-  h += '<div class="grupo">Tienda</div><div class="lista">' + fila('tienda', 'tienda', 'Tienda ' + esc(nombreTienda()), 'Abonos, químicos y herramientas con entrega a tu chacra') +
+  h += '<div class="grupo">Mercado</div><div class="lista">' + fila('tienda', 'tienda', 'Mercado', 'Tiendas de la zona: abonos, químicos, semillas y herramientas') +
     fila('mispedidos', 'boleta', 'Mis pedidos', (DB.d.misPedidos || []).filter(p => !['entregado', 'cancelado'].includes(p.estado)).length + ' en curso') +
     (rolTienda() ? '<div class="fila" data-act="modoTienda">' + ico('tienda') + '<div class="cuerpo-f"><div class="t">Modo tienda</div><div class="d">' +
-      (rolTienda() === 'reclamar' ? 'Activa tu tienda en la app' : 'Pedidos, productos y ofertas') + '</div></div>' + ico('der', 's') + '</div>' : '') + '</div>';
+      esc(nombreTienda()) + ': pedidos, productos y ofertas</div></div>' + ico('der', 's') + '</div>'
+      : DB.puede('config') ? '<div class="fila" data-act="quieroVender">' + ico('tienda') + '<div class="cuerpo-f"><div class="t">Quiero vender</div><div class="d">Inscribe tu tienda en el mercado · 30 días gratis</div></div>' + ico('der', 's') + '</div>' : '') +
+    (DB.d.esAdmin ? fila('admin', 'escudo', 'Administrar plataforma', 'Tiendas, pagos, denuncias y uso') : '') + '</div>';
   h += '<div class="grupo">Informes</div><div class="lista">' + fila('informes', 'excel', 'Informes en Excel y PDF', 'Planilla, productividad, cosecha, ventas, químicos…') + '</div>';
   h += '<div class="grupo">Seguridad</div><div class="lista">' +
     (DB.puede('config') ? fila('nube', 'nube_ok', 'Mi cuenta y nube', NUBE.activa() ? (NUBE.esV2() ? esc(CUENTA.email()) + ' · ' : 'Conectada · ') + (NUBE.pendientes() ? NUBE.pendientes() + ' por subir' : 'al día') : 'Entra con tu cuenta para guardar tus datos') : '') +
@@ -704,6 +706,7 @@ ACC.usuarioEditar = el => {
 };
 
 /* ---------- Ajustes ---------- */
+ACC.quitarSilencios = () => { DB.d.config.silenciadas = []; DB.guardar(); toast('Volverás a ver ofertas de todas las tiendas'); render(); };
 VISTAS.ajustes = () => {
   const c = DB.d.config;
   const seg = (k, ops) => '<div class="seg" data-aj="' + k + '">' + ops.map(([v, t]) => '<button class="' + (String(c[k]) === String(v) ? 'on' : '') + '" data-v="' + v + '">' + t + '</button>').join('') + '</div>';
@@ -715,8 +718,9 @@ VISTAS.ajustes = () => {
       '<button class="btn chico bloque" data-act="verPrivacidad" style="margin-bottom:8px">' + ico('candado', 's') + 'Política de privacidad</button>' +
       (NUBE.activa() ? '<button class="btn chico bloque" data-act="ir" data-ruta="nube" style="margin-bottom:8px">' + ico('nube_off', 's') + 'Eliminar mi cuenta de la nube</button>' : '') +
       '<button class="btn chico bloque peligro" data-act="borrarCelular">' + ico('borrar', 's') + 'Borrar todos los datos de este celular</button></div>' : '') +
-    '<div class="card"><h3>Ofertas de la tienda</h3><label class="chk"><input type="checkbox" id="ajOfertas"' + (c.ofertas === true ? ' checked' : '') + '><span>Quiero recibir ofertas para mi cultivo</span></label>' +
-    '<p class="small muted" style="margin:4px 0 0">Las ofertas se eligen dentro de tu celular. La tienda no recibe datos de tu chacra.</p></div>' +
+    '<div class="card"><h3>Ofertas del mercado</h3><label class="chk"><input type="checkbox" id="ajOfertas"' + (c.ofertas === true ? ' checked' : '') + '><span>Quiero recibir ofertas para mi cultivo</span></label>' +
+    '<p class="small muted" style="margin:4px 0 0">Máximo 3 ofertas nuevas por semana. Se eligen dentro de tu celular: las tiendas no reciben datos de tu chacra.</p>' +
+    ((c.silenciadas || []).length ? '<p class="small" style="margin:8px 0 4px">No ves ofertas de: ' + c.silenciadas.map(v => esc(nombreDe(v))).join(', ') + '</p><button class="btn chico" data-act="quitarSilencios">Volver a ver todas</button>' : '') + '</div>' +
     '<div class="card"><h3>Avisos en el celular</h3><p class="small muted" style="margin:0 0 10px">Cada mañana a las 6:00 te llega un aviso con los abonos que tocan, cobros, pagos y productos por vencer.</p>' +
     (NATIVO && Android.avisosPermitidos ? (Android.avisosPermitidos() ? '<div class="aviso tono-ok small">' + ico('check', 's') + '<div>Los avisos están permitidos.</div></div><button class="btn chico" data-act="probarAviso">' + ico('info', 's') + 'Enviar un aviso de prueba</button>'
       : '<div class="aviso tono-warn small">' + ico('alerta', 's') + '<div>El celular no permite avisos de MI-CHACRA.</div></div><button class="btn chico" data-act="permisoAvisos">Permitir avisos</button>')
